@@ -186,7 +186,8 @@ Return ONLY a valid JSON object with these exact keys (null only if truly not fi
   "strengths": [],
   "redFlags": [],
   "nextSteps": [],
-  "summary": "1-2 sentence summary of what this document contains and key findings"
+  "summary": "1-2 sentence summary of what this document contains and key findings",
+  "executiveSummary": null
 }
 
 EXTRACTION RULES — read carefully:
@@ -208,6 +209,7 @@ EXTRACTION RULES — read carefully:
 - strengths: array of 3-5 short strings highlighting positive deal attributes found in the document.
 - redFlags: array of 3-5 short strings highlighting risks, concerns, or missing data.
 - nextSteps: array of 3-5 recommended due diligence actions based on what this document shows.
+- executiveSummary: 2-3 sentence investment thesis paragraph summarizing the deal — financials, value-add angle, key risks. Write as if presenting to an investor. Null if insufficient data.
 - All dollar values: plain numbers only, no $, no commas (e.g. 2500000 not "$2.5M").
 - Return ONLY the JSON object. No markdown, no explanation, no fences.`;
 
@@ -285,7 +287,7 @@ async function extractFromFile(file, onLog) {
 // ── Merge extracted results ───────────────────────────────────────────────────
 function mergeExtractions(results) {
   const merged = { extracted: {}, docsSummary: [] };
-  const SCALAR_KEYS = ["askingPrice","grossRevenue","noiT12","noiMargin","physOcc","econOcc","capRate","unitCount","unitTypes","climateControl","delinquency","mhi","sqftPerCapita","competitors","sellerFinancing","propertyName"];
+  const SCALAR_KEYS = ["askingPrice","grossRevenue","noiT12","noiMargin","physOcc","econOcc","capRate","unitCount","unitTypes","climateControl","delinquency","mhi","sqftPerCapita","competitors","sellerFinancing","propertyName","executiveSummary"];
 
   for (const { parsed, file } of results) {
     merged.docsSummary.push({ name: file.name, type: parsed.docType, summary: parsed.summary });
@@ -557,34 +559,13 @@ function KillSwitchPanel({ deal, onSave }) {
 }
 
 // ── Scorecard Form ────────────────────────────────────────────────────────────
-const EMPTY_SC = { physOcc: "", econOcc: "", noiMargin: "", capRate: "", askingPrice: "", noiT12: "", grossRev: "", mhi: "", popGrowth: "", sqftPerCapita: "", competitors: "", streetRates: "", unitTypes: "", climateControl: "", delinquency: "", sellerFinancing: false, valueAdd: "", strengths: "", redFlags: "", nextSteps: "" };
+const EMPTY_SC = { physOcc: "", econOcc: "", noiMargin: "", capRate: "", askingPrice: "", noiT12: "", grossRev: "", mhi: "", popGrowth: "", sqftPerCapita: "", competitors: "", streetRates: "", unitTypes: "", climateControl: "", delinquency: "", sellerFinancing: false, valueAdd: "", strengths: "", redFlags: "", nextSteps: "", executiveSummary: "" };
 
-function ScorecardForm({ deal, onSave }) {
-  const [f, setF] = useState(deal.scorecard ? { ...EMPTY_SC, ...deal.scorecard } : EMPTY_SC);
-  const [aiFields, setAiFields] = useState([]);
-  const [docs, setDocs] = useState(deal.docs || []);
+function EditPanel({ deal, onSave }) {
+  const sc = deal.scorecard;
+  const [f, setF] = useState(sc ? { ...EMPTY_SC, ...sc } : EMPTY_SC);
   const set = (k) => (e) => setF(prev => ({ ...prev, [k]: e.target?.value ?? e }));
   const score = useMemo(() => scoreCard(f), [f]);
-
-  const handleExtracted = useCallback((extracted, docsSummary) => {
-    setDocs(prev => [...prev, ...docsSummary]);
-    setF(prev => {
-      const next = { ...prev };
-      const filled = [];
-      for (const [k, v] of Object.entries(extracted)) {
-        if (k in next && (next[k] === "" || next[k] === false)) {
-          next[k] = k === "sellerFinancing" ? v === "true" : v;
-          filled.push(k);
-        }
-      }
-      setAiFields(prev => [...new Set([...prev, ...filled])]);
-      return next;
-    });
-  }, []);
-
-  const ai = (k) => aiFields.includes(k);
-  const hl = (k) => ai(k) ? "border-amber-500/60 bg-amber-500/5" : "";
-  const AITag = ({ k }) => ai(k) ? <span className="text-amber-400 ml-1 text-xs">✦ AI</span> : null;
 
   return (
     <div className="space-y-6">
@@ -605,22 +586,12 @@ function ScorecardForm({ deal, onSave }) {
         <ScoreBar value={score.deal} max={8} label="Deal Structure" />
       </div>
 
-      {/* Upload */}
-      <div>
-        <p className={sectionHd}>Upload Deal Documents</p>
-        <DocUploadZone onExtracted={handleExtracted} existingDocs={docs} dealName={deal.name} />
-        {aiFields.length > 0 && <p className="text-xs text-amber-400 mt-2">✦ Amber fields were auto-filled by AI — review before saving</p>}
-      </div>
-
       {/* Financial */}
       <div>
         <p className={sectionHd}>Financial — 35 pts</p>
         <div className="grid grid-cols-2 gap-3">
           {[["physOcc","Physical Occ %","90"],["econOcc","Economic Occ %","85"],["noiMargin","NOI Margin %","52"],["capRate","Cap Rate %","6.5"],["askingPrice","Asking Price","2500000"],["noiT12","NOI T12","180000"],["grossRev","Gross Revenue","340000"]].map(([k,l,ph]) => (
-            <div key={k}>
-              <label className={labelCls}>{l}<AITag k={k} /></label>
-              <input className={`${inputCls} ${hl(k)}`} value={f[k]} onChange={set(k)} placeholder={ph} type="number" />
-            </div>
+            <div key={k}><label className={labelCls}>{l}</label><input className={inputCls} value={f[k]} onChange={set(k)} placeholder={ph} type="number" /></div>
           ))}
         </div>
       </div>
@@ -629,14 +600,8 @@ function ScorecardForm({ deal, onSave }) {
       <div>
         <p className={sectionHd}>Market — 25 pts</p>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Median HHI ($)<AITag k="mhi" /></label>
-            <input className={`${inputCls} ${hl("mhi")}`} value={f.mhi} onChange={set("mhi")} placeholder="62000" type="number" />
-          </div>
-          <div>
-            <label className={labelCls}>Sq Ft / Capita<AITag k="sqftPerCapita" /></label>
-            <input className={`${inputCls} ${hl("sqftPerCapita")}`} value={f.sqftPerCapita} onChange={set("sqftPerCapita")} placeholder="7.2" type="number" />
-          </div>
+          <div><label className={labelCls}>Median HHI ($)</label><input className={inputCls} value={f.mhi} onChange={set("mhi")} placeholder="62000" type="number" /></div>
+          <div><label className={labelCls}>Sq Ft / Capita</label><input className={inputCls} value={f.sqftPerCapita} onChange={set("sqftPerCapita")} placeholder="7.2" type="number" /></div>
           <div className="col-span-2">
             <label className={labelCls}>Population Growth</label>
             <select className={selectCls} value={f.popGrowth} onChange={set("popGrowth")}>
@@ -653,10 +618,7 @@ function ScorecardForm({ deal, onSave }) {
       <div>
         <p className={sectionHd}>Competitive — 20 pts</p>
         <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Competitors within 3 mi<AITag k="competitors" /></label>
-            <input className={`${inputCls} ${hl("competitors")}`} value={f.competitors} onChange={set("competitors")} placeholder="3" type="number" />
-          </div>
+          <div><label className={labelCls}>Competitors within 3 mi</label><input className={inputCls} value={f.competitors} onChange={set("competitors")} placeholder="3" type="number" /></div>
           <div>
             <label className={labelCls}>Street Rates vs Market</label>
             <select className={selectCls} value={f.streetRates} onChange={set("streetRates")}>
@@ -674,10 +636,7 @@ function ScorecardForm({ deal, onSave }) {
         <p className={sectionHd}>Operational — 12 pts</p>
         <div className="grid grid-cols-3 gap-3">
           {[["unitTypes","Unit Types","4"],["climateControl","Climate Control %","35"],["delinquency","Delinquency %","2.5"]].map(([k,l,ph]) => (
-            <div key={k}>
-              <label className={labelCls}>{l}<AITag k={k} /></label>
-              <input className={`${inputCls} ${hl(k)}`} value={f[k]} onChange={set(k)} placeholder={ph} type="number" />
-            </div>
+            <div key={k}><label className={labelCls}>{l}</label><input className={inputCls} value={f[k]} onChange={set(k)} placeholder={ph} type="number" /></div>
           ))}
         </div>
       </div>
@@ -687,29 +646,26 @@ function ScorecardForm({ deal, onSave }) {
         <p className={sectionHd}>Deal Structure — 8 pts</p>
         <div className="flex items-center gap-3 mb-3">
           <Toggle value={!!f.sellerFinancing} onChange={(v) => setF(p => ({ ...p, sellerFinancing: v }))} />
-          <span className="text-sm text-zinc-300">Seller Financing Available (+4 pts)<AITag k="sellerFinancing" /></span>
+          <span className="text-sm text-zinc-300">Seller Financing Available (+4 pts)</span>
         </div>
-        <div>
-          <label className={labelCls}>Value-Add Opportunity (+4 pts if filled)</label>
-          <input className={inputCls} value={f.valueAdd} onChange={set("valueAdd")} placeholder="Rezone 2 acres for RV storage, add 40 units" />
-        </div>
+        <div><label className={labelCls}>Value-Add Opportunity (+4 pts if filled)</label><input className={inputCls} value={f.valueAdd} onChange={set("valueAdd")} placeholder="Rezone 2 acres for RV storage, add 40 units" /></div>
       </div>
 
       {/* Narratives */}
       <div>
-        <p className={sectionHd}>Narrative (one per line)</p>
+        <p className={sectionHd}>Narratives</p>
         <div className="space-y-3">
-          {[["strengths","Key Strengths","High occupancy, seller motivated"],["redFlags","Red Flags","Delinquency trending up"],["nextSteps","Next Steps","Order phase I, request rent rolls"]].map(([k,l,ph]) => (
+          {[["executiveSummary","Executive Summary","Investment thesis…"],["strengths","Key Strengths","High occupancy, seller motivated"],["redFlags","Red Flags","Delinquency trending up"],["nextSteps","Next Steps","Order phase I, request rent rolls"]].map(([k,l,ph]) => (
             <div key={k}>
-              <label className={labelCls}>{l}<AITag k={k} /></label>
-              <textarea className={`${inputCls} resize-y ${hl(k)}`} rows={Math.max(3, (f[k] || "").split("\n").length + 1)} value={f[k]} onChange={set(k)} placeholder={ph} style={{minHeight: "80px", height: "auto"}} onInput={e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }} />
+              <label className={labelCls}>{l}</label>
+              <textarea className={`${inputCls} resize-y`} rows={3} value={f[k] || ""} onChange={set(k)} placeholder={ph} style={{minHeight:"60px"}} onInput={e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }} />
             </div>
           ))}
         </div>
       </div>
 
-      <button onClick={() => onSave({ ...f, score, docs })} className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-lg py-3 text-sm transition-colors">
-        Save Scorecard — {score.total}/100 {score.rec}
+      <button onClick={() => onSave({ ...f, score, docs: sc?.docs || [] })} className="w-full bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold rounded-lg py-3 text-sm transition-colors">
+        Save — {score.total}/100 {score.rec}
       </button>
     </div>
   );
@@ -836,49 +792,78 @@ function OfferMultipleCalc({ scorecard }) {
   );
 }
 
-// ── Overview Panel ────────────────────────────────────────────────────────────
-function OverviewPanel({ deal }) {
+// ── Report View (Cactus-style) ────────────────────────────────────────────────
+function ReportView({ deal, onUpdateDeal }) {
   const sc = deal.scorecard;
-  const ks = deal.killSwitch;
+  const splitLines = (txt) => txt ? txt.split("\n").filter(Boolean) : [];
 
-  if (!sc && !ks) return (
-    <div className="text-center py-12 text-zinc-500">
-      <p className="text-4xl mb-3">🔍</p>
-      <p className="font-medium text-zinc-400">Start with the Kill Switch</p>
-      <p className="text-sm mt-1">Run kill switch checks before scoring this deal.</p>
-    </div>
-  );
-  if (ks && !ks.overallPass) return (
-    <div className="text-center py-12">
-      <p className="text-4xl mb-3">🚫</p>
-      <p className="font-bold text-red-400 text-lg">Deal Killed</p>
-      <p className="text-sm text-zinc-500 mt-1">This deal did not pass the kill switch.</p>
-    </div>
-  );
-  if (!sc) return (
-    <div className="text-center py-12 text-zinc-500">
-      <p className="text-4xl mb-3">📋</p>
-      <p className="font-medium text-zinc-400">Scorecard not yet completed</p>
-      <p className="text-sm mt-1">Switch to the Scorecard tab to analyze this deal.</p>
-    </div>
-  );
+  const handleExtracted = useCallback((extracted, docsSummary) => {
+    const base = sc ? { ...EMPTY_SC, ...sc } : { ...EMPTY_SC };
+    const FIELD_MAP = { grossRevenue: "grossRev" };
+    for (const [k, v] of Object.entries(extracted)) {
+      const key = FIELD_MAP[k] || k;
+      if (key in base) base[key] = k === "sellerFinancing" ? v === "true" : v;
+    }
+    const newScore = scoreCard(base);
+    const newDocs = [...(sc?.docs || []), ...docsSummary];
+    onUpdateDeal({ ...deal, scorecard: { ...base, score: newScore, docs: newDocs }, status: "complete" });
+  }, [deal, sc, onUpdateDeal]);
 
-  const { score } = sc;
-  const lines = (txt) => txt ? txt.split("\n").filter(Boolean) : [];
+  if (!sc) {
+    return (
+      <div className="space-y-6">
+        <div className="text-center py-10">
+          <p className="text-5xl mb-4">📂</p>
+          <p className="font-semibold text-zinc-300 text-lg mb-1">Upload documents to generate your report</p>
+          <p className="text-zinc-500 text-sm">AI reads PDFs, Excel, Word, and images — auto-fills all metrics</p>
+        </div>
+        <DocUploadZone onExtracted={handleExtracted} dealName={deal.name} />
+      </div>
+    );
+  }
+
+  const score = sc.score;
+  const strengths = splitLines(sc.strengths);
+  const redFlags = splitLines(sc.redFlags);
+  const nextSteps = splitLines(sc.nextSteps);
+
+  const recBg = { "GO": "bg-emerald-500", "CONDITIONAL GO": "bg-amber-500", "SOFT PASS": "bg-orange-500", "PASS": "bg-red-500" }[score.rec] || "bg-zinc-600";
 
   return (
-    <div className="space-y-6">
-      <div className="bg-zinc-950 border border-zinc-700 rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4">
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="bg-gradient-to-br from-zinc-900 to-zinc-950 border border-zinc-700 rounded-2xl p-6">
+        <div className="flex items-start justify-between mb-5">
           <div>
-            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Grand Total</p>
-            <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold text-zinc-100" style={{ fontFamily: "monospace" }}>{score.total}</span>
-              <span className="text-zinc-500">/100</span>
-            </div>
+            <h2 className="text-2xl font-bold text-zinc-100">{deal.name}</h2>
+            <p className="text-sm text-zinc-500 mt-1">{[deal.address, deal.city, deal.state].filter(Boolean).join(", ")}</p>
           </div>
-          <span className={`text-sm font-bold px-3 py-1 rounded-full border ${recColor(score.rec)}`}>{score.rec}</span>
+          <div className="text-right shrink-0 ml-4">
+            <div className="text-4xl font-bold text-zinc-100" style={{fontFamily:"monospace"}}>{score.total}<span className="text-lg text-zinc-500">/100</span></div>
+            <span className={`inline-block mt-1 text-xs font-bold px-3 py-1 rounded-full text-white ${recBg}`}>{score.rec}</span>
+          </div>
         </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {[["Deal Score",`${score.total}/100`],["Recommendation",score.rec],["Physical Occ",sc.physOcc?`${sc.physOcc}%`:"—"],["Cap Rate",sc.capRate?`${sc.capRate}%`:"—"]].map(([l,v]) => (
+            <div key={l} className="bg-zinc-950/60 border border-zinc-800 rounded-xl p-3">
+              <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">{l}</p>
+              <p className="text-sm font-bold text-zinc-200" style={{fontFamily:"monospace"}}>{v}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Executive Summary */}
+      {sc.executiveSummary && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Executive Summary</p>
+          <p className="text-sm text-zinc-300 leading-relaxed">{sc.executiveSummary}</p>
+        </div>
+      )}
+
+      {/* Score Breakdown */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-4">Score Breakdown</p>
         <ScoreBar value={score.fin} max={35} label="Financial" />
         <ScoreBar value={score.mkt} max={25} label="Market" />
         <ScoreBar value={score.comp} max={20} label="Competitive" />
@@ -886,54 +871,72 @@ function OverviewPanel({ deal }) {
         <ScoreBar value={score.deal} max={8} label="Deal Structure" />
       </div>
 
+      {/* Key Metrics */}
       <div className="grid grid-cols-3 gap-3">
-        {[["Asking Price", fmt$(sc.askingPrice)],["NOI T12", fmt$(sc.noiT12)],["Cap Rate", fmtPct(sc.capRate)],["Phys. Occ", fmtPct(sc.physOcc)],["NOI Margin", fmtPct(sc.noiMargin)],["Gross Rev", fmt$(sc.grossRev)]].map(([l, v]) => (
-          <div key={l} className="bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-center">
+        {[["Asking Price",fmt$(sc.askingPrice)],["NOI T12",fmt$(sc.noiT12)],["Gross Revenue",fmt$(sc.grossRev)],["NOI Margin",fmtPct(sc.noiMargin)],["Econ. Occ",fmtPct(sc.econOcc)],["Units",sc.unitCount||"—"]].map(([l,v]) => (
+          <div key={l} className="bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-center">
             <p className="text-xs text-zinc-500 mb-1">{l}</p>
-            <p className="text-sm font-semibold text-zinc-200" style={{ fontFamily: "monospace" }}>{v}</p>
+            <p className="text-sm font-semibold text-zinc-200" style={{fontFamily:"monospace"}}>{v}</p>
           </div>
         ))}
       </div>
 
-      {/* Docs attached */}
-      {sc.docs?.length > 0 && (
-        <div>
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Attached Documents</p>
-          <div className="space-y-1.5">
-            {sc.docs.map((d, i) => (
-              <div key={i} className="flex items-center gap-2 bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2">
-                <span className="text-sm">{TYPE_ICONS[detectFileType({ name: d.name, type: "" })] || "📎"}</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-zinc-300 truncate">{d.name}</p>
-                  <p className="text-xs text-zinc-600">{d.type}</p>
+      {/* Risks & Opportunities */}
+      {(redFlags.length > 0 || strengths.length > 0) && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-4">Risks & Opportunities</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {redFlags.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-red-400 uppercase tracking-wider mb-3">⚠ Top Risks</p>
+                <div className="space-y-2">
+                  {redFlags.map((s,i) => (
+                    <div key={i} className="bg-red-500/5 border-l-2 border-red-500/40 rounded-r-xl px-4 py-3">
+                      <p className="text-sm text-zinc-300">{s}</p>
+                    </div>
+                  ))}
                 </div>
+              </div>
+            )}
+            {strengths.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-3">✦ Opportunities</p>
+                <div className="space-y-2">
+                  {strengths.map((s,i) => (
+                    <div key={i} className="bg-emerald-500/5 border-l-2 border-emerald-500/40 rounded-r-xl px-4 py-3">
+                      <p className="text-sm text-zinc-300">{s}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Next Steps */}
+      {nextSteps.length > 0 && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-4">Strategic Next Steps</p>
+          <div className="space-y-3">
+            {nextSteps.map((s,i) => (
+              <div key={i} className="flex gap-3 items-start">
+                <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-xs font-bold text-white shrink-0 mt-0.5">{i+1}</div>
+                <p className="text-sm text-zinc-300 leading-relaxed">{s}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* ── Offer Multiple Calculator ── */}
+      {/* Offer Calc */}
       <OfferMultipleCalc scorecard={sc} />
 
-      {lines(sc.strengths).length > 0 && (
-        <div>
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Key Strengths</p>
-          <ul className="space-y-1.5">{lines(sc.strengths).map((s, i) => <li key={i} className="flex gap-2 text-sm text-zinc-300"><span className="text-emerald-400 mt-0.5 shrink-0">✓</span>{s}</li>)}</ul>
-        </div>
-      )}
-      {lines(sc.redFlags).length > 0 && (
-        <div>
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Red Flags</p>
-          <ul className="space-y-1.5">{lines(sc.redFlags).map((s, i) => <li key={i} className="flex gap-2 text-sm text-zinc-300"><span className="text-amber-400 mt-0.5 shrink-0">⚠</span>{s}</li>)}</ul>
-        </div>
-      )}
-      {lines(sc.nextSteps).length > 0 && (
-        <div>
-          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">Next Steps</p>
-          <ul className="space-y-1.5">{lines(sc.nextSteps).map((s, i) => <li key={i} className="flex gap-2 text-sm text-zinc-300"><span className="text-amber-400 mt-0.5 shrink-0">→</span>{s}</li>)}</ul>
-        </div>
-      )}
+      {/* Add more docs */}
+      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+        <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Add More Documents</p>
+        <DocUploadZone onExtracted={handleExtracted} existingDocs={sc.docs||[]} dealName={deal.name} />
+      </div>
     </div>
   );
 }
@@ -1196,31 +1199,16 @@ function BuyBoxPanel({ deal, onSave }) {
 }
 
 function DealDetail({ deal, onBack, onUpdateDeal }) {
-  const [tab, setTab] = useState("overview");
-  const killed = deal.killSwitch && !deal.killSwitch.overallPass;
+  const [tab, setTab] = useState("report");
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       <div className="border-b border-zinc-800 px-6 py-4">
         <button onClick={onBack} className="text-xs text-zinc-500 hover:text-zinc-300 mb-3 flex items-center gap-1 transition-colors">← Back to Pipeline</button>
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-xl font-bold text-zinc-100">{deal.name}</h1>
-            <p className="text-sm text-zinc-500 mt-0.5">{deal.address}{deal.city ? `, ${deal.city}` : ""}, {deal.state} {deal.zip}</p>
-          </div>
-          {deal.scorecard && (
-            <div className="text-right">
-              <p className="text-xs text-zinc-500 mb-1">Score</p>
-              <p className="text-2xl font-bold" style={{ fontFamily: "monospace", color: scoreColor(deal.scorecard.score.total) }}>
-                {deal.scorecard.score.total}<span className="text-sm text-zinc-500">/100</span>
-              </p>
-            </div>
-          )}
-        </div>
-        <div className="flex gap-1 mt-4 overflow-x-auto">
-          {[["overview","Overview"],["buybox","Buy Box"],["killswitch","Kill Switch"],["scorecard","Scorecard"]].map(([id, label]) => (
-            <button key={id} onClick={() => !(id === "scorecard" && killed) && setTab(id)}
-              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors shrink-0 ${id === "scorecard" && killed ? "text-zinc-600 cursor-not-allowed" : tab === id ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}>
+        <div className="flex gap-1 overflow-x-auto">
+          {[["report","Report"],["edit","Edit Fields"],["buybox","Buy Box"],["killswitch","Kill Switch"]].map(([id,label]) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors shrink-0 ${tab === id ? "bg-zinc-800 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"}`}>
               {label}
             </button>
           ))}
@@ -1228,23 +1216,23 @@ function DealDetail({ deal, onBack, onUpdateDeal }) {
       </div>
 
       <div className="p-6 max-w-2xl mx-auto">
-        {tab === "overview" && <OverviewPanel deal={deal} />}
+        {tab === "report" && <ReportView deal={deal} onUpdateDeal={onUpdateDeal} />}
+        {tab === "edit" && (
+          <EditPanel deal={deal} onSave={(sc) => {
+            onUpdateDeal({ ...deal, scorecard: sc, status: "complete" });
+            setTab("report");
+          }} />
+        )}
         {tab === "buybox" && (
           <BuyBoxPanel deal={deal} onSave={(bb) => {
             onUpdateDeal({ ...deal, buyBox: bb });
-            setTab("overview");
+            setTab("report");
           }} />
         )}
         {tab === "killswitch" && (
           <KillSwitchPanel deal={deal} onSave={(ks) => {
             onUpdateDeal({ ...deal, killSwitch: ks, status: ks.overallPass ? "analyzing" : "killed" });
-            setTab("overview");
-          }} />
-        )}
-        {tab === "scorecard" && !killed && (
-          <ScorecardForm deal={deal} onSave={(sc) => {
-            onUpdateDeal({ ...deal, scorecard: sc, status: "complete" });
-            setTab("overview");
+            setTab("report");
           }} />
         )}
       </div>
