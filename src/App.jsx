@@ -702,7 +702,7 @@ function ScorecardForm({ deal, onSave }) {
           {[["strengths","Key Strengths","High occupancy, seller motivated"],["redFlags","Red Flags","Delinquency trending up"],["nextSteps","Next Steps","Order phase I, request rent rolls"]].map(([k,l,ph]) => (
             <div key={k}>
               <label className={labelCls}>{l}<AITag k={k} /></label>
-              <textarea className={`${inputCls} resize-none ${hl(k)}`} rows={3} value={f[k]} onChange={set(k)} placeholder={ph} />
+              <textarea className={`${inputCls} resize-y ${hl(k)}`} rows={Math.max(3, (f[k] || "").split("\n").length + 1)} value={f[k]} onChange={set(k)} placeholder={ph} style={{minHeight: "80px", height: "auto"}} onInput={e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }} />
             </div>
           ))}
         </div>
