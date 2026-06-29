@@ -929,6 +929,39 @@ function ReportView({ deal, onUpdateDeal }) {
         </div>
       )}
 
+      {/* Kill Switch */}
+      {deal.killSwitch && (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Kill Switch</p>
+          <div className={`rounded-xl p-3 border text-center mb-3 ${deal.killSwitch.overallPass ? "bg-emerald-500/10 border-emerald-500/30" : "bg-red-500/10 border-red-500/30"}`}>
+            <p className={`text-sm font-bold ${deal.killSwitch.overallPass ? "text-emerald-400" : "text-red-400"}`}>{deal.killSwitch.overallPass ? "✓ Passes Kill Switch" : "✕ Deal Killed"}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {[["REIT",!deal.killSwitch.reitPresent],["MHI ≥ $50k",deal.killSwitch.mhiPass],["Crime ≤ 100",deal.killSwitch.crimePass],["Flood Zone",!deal.killSwitch.floodZone]].map(([l,pass]) => (
+              <div key={l} className="flex items-center justify-between bg-zinc-950 rounded-lg px-3 py-2">
+                <span className="text-zinc-400">{l}</span>
+                <span className={pass ? "text-emerald-400" : "text-red-400"}>{pass ? "PASS" : "FAIL"}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Buy Box */}
+      {deal.buyBox && (() => { const bs = buyBoxStatus(deal.buyBox); return bs ? (
+        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+          <p className="text-xs text-zinc-500 uppercase tracking-wider mb-3">Buy Box</p>
+          <div className={`rounded-xl p-3 border text-center mb-3 ${bs.fits ? "bg-emerald-500/10 border-emerald-500/30" : bs.hardFails.length > 0 ? "bg-red-500/10 border-red-500/30" : "bg-amber-500/10 border-amber-500/30"}`}>
+            <p className={`text-sm font-bold ${bs.fits ? "text-emerald-400" : bs.hardFails.length > 0 ? "text-red-400" : "text-amber-400"}`}>{bs.fits ? "✓ Fits Buy Box" : bs.hardFails.length > 0 ? `✕ ${bs.hardFails[0]}` : "⚡ Partial Fit"}</p>
+          </div>
+          <div className="flex items-center justify-between text-xs bg-zinc-950 rounded-lg px-3 py-2">
+            <span className="text-zinc-400">Value-Add Score</span>
+            <span className={`font-bold ${bs.leverScore >= 14 ? "text-emerald-400" : bs.leverScore >= 7 ? "text-amber-400" : "text-red-400"}`}>{bs.leverScore}/30</span>
+          </div>
+          {bs.demandDrivers.length > 0 && <p className="text-xs text-emerald-400 mt-2">{bs.demandDrivers.length} demand driver{bs.demandDrivers.length !== 1 ? "s" : ""} identified</p>}
+        </div>
+      ) : null; })()}
+
       {/* Offer Calc */}
       <OfferMultipleCalc scorecard={sc} />
 
