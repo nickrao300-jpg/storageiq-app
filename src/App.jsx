@@ -836,7 +836,8 @@ function ReportView({ deal, onUpdateDeal }) {
     if (extracted.lastSaleYear) bb.lastSaleYear = extracted.lastSaleYear;
     if (extracted.floodZone !== null && extracted.floodZone !== undefined) bb.floodZone = extracted.floodZone === "true" || extracted.floodZone === true;
 
-    onUpdateDeal({ ...deal, scorecard: { ...base, score: newScore, docs: newDocs }, killSwitch: ksWithStatus, buyBox: bb, status: "complete" });
+    const updatedName = extracted.propertyName || deal.name;
+    onUpdateDeal({ ...deal, name: updatedName, scorecard: { ...base, score: newScore, docs: newDocs }, killSwitch: ksWithStatus, buyBox: bb, status: "complete" });
   }, [deal, sc, onUpdateDeal]);
 
   if (!sc) {
@@ -1542,6 +1543,13 @@ export default function App() {
     setShowNewDeal(false);
   };
 
+  const createBlankDeal = () => {
+    const deal = { name: "New Deal", id: Date.now(), status: "pending", docs: [], createdAt: new Date().toISOString() };
+    setDeals(prev => [deal, ...prev]);
+    setActiveDealId(deal.id);
+    setView("detail");
+  };
+
   const updateDeal = (updated) => setDeals(prev => prev.map(d => d.id === updated.id ? updated : d));
   const deleteDeal = (id) => setDeals(prev => prev.filter(d => d.id !== id));
 
@@ -1559,10 +1567,5 @@ export default function App() {
   if (view === "detail" && activeDeal) {
     return <DealDetail deal={activeDeal} onBack={() => setView("dashboard")} onUpdateDeal={updateDeal} />;
   }
-  return (
-    <>
-      <Dashboard deals={deals} onNew={() => setShowNewDeal(true)} onOpen={(id) => { setActiveDealId(id); setView("detail"); }} onDelete={deleteDeal} />
-      {showNewDeal && <NewDealForm onSave={createDeal} onCancel={() => setShowNewDeal(false)} />}
-    </>
-  );
+  return <Dashboard deals={deals} onNew={createBlankDeal} onOpen={(id) => { setActiveDealId(id); setView("detail"); }} onDelete={deleteDeal} />;
 }
