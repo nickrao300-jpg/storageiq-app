@@ -187,7 +187,12 @@ Return ONLY a valid JSON object with these exact keys (null only if truly not fi
   "redFlags": [],
   "nextSteps": [],
   "summary": "1-2 sentence summary of what this document contains and key findings",
-  "executiveSummary": null
+  "executiveSummary": null,
+  "rentableSqft": null,
+  "lastSaleYear": null,
+  "floodZone": null,
+  "reitPresent": null,
+  "crimeIndex": null
 }
 
 EXTRACTION RULES — read carefully:
@@ -210,6 +215,11 @@ EXTRACTION RULES — read carefully:
 - redFlags: array of 3-5 short strings highlighting risks, concerns, or missing data.
 - nextSteps: array of 3-5 recommended due diligence actions based on what this document shows.
 - executiveSummary: 2-3 sentence investment thesis paragraph summarizing the deal — financials, value-add angle, key risks. Write as if presenting to an investor. Null if insufficient data.
+- rentableSqft: total rentable square footage of the facility as a plain number. Look for "rentable sqft", "net rentable area", "total square feet".
+- lastSaleYear: 4-digit year the property last sold. Look for "sale date", "acquired", "purchased", "deed date". Null if not found.
+- floodZone: true if property is in a FEMA flood zone, false if explicitly clear, null if not mentioned.
+- reitPresent: true if a REIT (Extra Space, Public Storage, CubeSmart, Life Storage, etc.) is mentioned as nearby competitor, false if explicitly no REITs, null if not mentioned.
+- crimeIndex: numeric crime index value if mentioned (national average = 100). Null if not found.
 - All dollar values: plain numbers only, no $, no commas (e.g. 2500000 not "$2.5M").
 - Return ONLY the JSON object. No markdown, no explanation, no fences.`;
 
@@ -287,7 +297,7 @@ async function extractFromFile(file, onLog) {
 // ── Merge extracted results ───────────────────────────────────────────────────
 function mergeExtractions(results) {
   const merged = { extracted: {}, docsSummary: [] };
-  const SCALAR_KEYS = ["askingPrice","grossRevenue","noiT12","noiMargin","physOcc","econOcc","capRate","unitCount","unitTypes","climateControl","delinquency","mhi","sqftPerCapita","competitors","sellerFinancing","propertyName","executiveSummary"];
+  const SCALAR_KEYS = ["askingPrice","grossRevenue","noiT12","noiMargin","physOcc","econOcc","capRate","unitCount","unitTypes","climateControl","delinquency","mhi","sqftPerCapita","competitors","sellerFinancing","propertyName","executiveSummary","rentableSqft","lastSaleYear","floodZone","reitPresent","crimeIndex"];
 
   for (const { parsed, file } of results) {
     merged.docsSummary.push({ name: file.name, type: parsed.docType, summary: parsed.summary });
@@ -798,6 +808,7 @@ function ReportView({ deal, onUpdateDeal }) {
   const splitLines = (txt) => txt ? txt.split("\n").filter(Boolean) : [];
 
   const handleExtracted = useCallback((extracted, docsSummary) => {
+    // Update scorecard fields
     const base = sc ? { ...EMPTY_SC, ...sc } : { ...EMPTY_SC };
     const FIELD_MAP = { grossRevenue: "grossRev" };
     for (const [k, v] of Object.entries(extracted)) {
@@ -806,7 +817,26 @@ function ReportView({ deal, onUpdateDeal }) {
     }
     const newScore = scoreCard(base);
     const newDocs = [...(sc?.docs || []), ...docsSummary];
-    onUpdateDeal({ ...deal, scorecard: { ...base, score: newScore, docs: newDocs }, status: "complete" });
+
+    // Update kill switch fields
+    const ks = { ...(deal.killSwitch || { reitPresent: false, reitDetail: "", mhi: "", mhiDetail: "", crimeIndex: "", crimeDetail: "", floodZone: false, floodDetail: "" }) };
+    if (extracted.mhi) ks.mhi = extracted.mhi;
+    if (extracted.crimeIndex) ks.crimeIndex = extracted.crimeIndex;
+    if (extracted.floodZone !== null && extracted.floodZone !== undefined) ks.floodZone = extracted.floodZone === "true" || extracted.floodZone === true;
+    if (extracted.reitPresent !== null && extracted.reitPresent !== undefined) ks.reitPresent = extracted.reitPresent === "true" || extracted.reitPresent === true;
+    const mhiPass = (parseFloat(ks.mhi) || 0) >= 50000;
+    const crimePass = (parseFloat(ks.crimeIndex) || 999) <= 100;
+    const ksWithStatus = { ...ks, mhiPass, crimePass, overallPass: !ks.reitPresent && mhiPass && crimePass && !ks.floodZone };
+
+    // Update buy box fields
+    const bb = { ...(deal.buyBox || {}) };
+    if (extracted.mhi) bb.mhi = extracted.mhi;
+    if (extracted.sqftPerCapita) bb.sqftPerCapita = extracted.sqftPerCapita;
+    if (extracted.rentableSqft) bb.sqft = extracted.rentableSqft;
+    if (extracted.lastSaleYear) bb.lastSaleYear = extracted.lastSaleYear;
+    if (extracted.floodZone !== null && extracted.floodZone !== undefined) bb.floodZone = extracted.floodZone === "true" || extracted.floodZone === true;
+
+    onUpdateDeal({ ...deal, scorecard: { ...base, score: newScore, docs: newDocs }, killSwitch: ksWithStatus, buyBox: bb, status: "complete" });
   }, [deal, sc, onUpdateDeal]);
 
   if (!sc) {
