@@ -835,6 +835,8 @@ function ReportView({ deal, onUpdateDeal }) {
     if (extracted.rentableSqft) bb.sqft = extracted.rentableSqft;
     if (extracted.lastSaleYear) bb.lastSaleYear = extracted.lastSaleYear;
     if (extracted.floodZone !== null && extracted.floodZone !== undefined) bb.floodZone = extracted.floodZone === "true" || extracted.floodZone === true;
+    if (extracted.strengths) bb.marketNotes = Array.isArray(extracted.strengths) ? extracted.strengths.join("\n") : extracted.strengths;
+    if (extracted.summary) bb.notes = extracted.summary;
 
     const updatedName = extracted.propertyName || deal.name;
     onUpdateDeal({ ...deal, name: updatedName, scorecard: { ...base, score: newScore, docs: newDocs }, killSwitch: ksWithStatus, buyBox: bb, status: "complete" });
